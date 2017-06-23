@@ -138,7 +138,7 @@ function decode(record) {
             node: parsed.node_id,
             sensor: parsed.sensor.toLowerCase(),
             data: parsed.data,
-            datetime: parsed.datetime.replace("T", " ")
+            datetime: parsed.datetime.replace(' ', 'T')
         }
     } catch (e) {
         console.log(`[index.js] could not decode ${data}: ${e.toString()}`);
@@ -157,18 +157,12 @@ function pushToFirehose(records, firehose) {
 }
 
 function prepRecordForFirehose(o) {
-    const data = JSON.stringify(o.data);
-    let row = `${o.network},${o.node},${o.datetime},${o.meta_id},${o.sensor},'${data}'\n`;
     // Note that the double quote (") is the Redshift quote character.
     // http://docs.aws.amazon.com/redshift/latest/dg/copy-parameters-data-format.html#copy-csv
-    // So we need to replace double quotes in stringified JSON with _two_ double quotes
-    row = row.replace(/"/g, '""');
-    // NB: this code once had a .replace(/'/g, '"') as well.
-    // Jesse can't remember why he wrote it in the first place, 
-    // but it may have been for an edge case he forgot about.
-    // Will thinks it is a bad idea to include such a line, 
-    // because a data field that has text with one apostrophe 
-    // could make the line unparsable.
+    // IF you put two quote characters back to back, it escapes itself.
+    // So we need to replace double quotes in stringified JSON with _two_ double quotes.
+    const data = JSON.stringify(o.data).replace(/"/g, '""');
+    let row = `${o.network},${o.node},${o.datetime},${o.meta_id},${o.sensor},"${data}"`;
     return {Data: row};
 }
 
@@ -205,15 +199,8 @@ function format(tree, record) {
 
     // This is the descriptive JSONAPI-like format
     // we want to send to our end users
-    const {sensor, node, network} = record;
-    const observationTemplate = {
-        type: 'sensorObservations',
-        attributes: {
-            sensor, node, network,
-            meta_id: record.meta_id,
-            timestamp: record.timestamp
-        }
-    };
+    const {sensor, node, network, datetime} = record;
+    // console.log('timestamp', record.timestamp);
     /** 
      * We maintain a mapping from Beehive naming to Plenario naming in
      * the sensorMetadata JSON:
@@ -271,12 +258,23 @@ function format(tree, record) {
         }
         observations[feature].properties[property] = record.data[beehivePropertyName];
     }
+    // FIXME: This would be better as one loop
+
     // Return array with one JSONAPI observation object 
     // for each feature present in the record
+    if (sensor === 'bmi160') {
+        console.log(observations);
+    }
     return _.values(observations).map(o => {
-        const templateInstance = Object.assign({}, observationTemplate);
-        Object.assign(templateInstance.attributes, o)
-        return templateInstance;
+        const observationTemplate = {
+            type: 'sensorObservations',
+            attributes: {
+                sensor, node, network, datetime,
+                meta_id: record.meta_id
+            }
+        };
+        Object.assign(observationTemplate.attributes, o)
+        return observationTemplate;
     });
 }
 

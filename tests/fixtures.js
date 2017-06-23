@@ -72,7 +72,7 @@ const beehiveRecords = [
       oxidizing_gases: 34538
     },
     sensor: "chemsense",
-    node_id: "0000001e0610ba72"
+    node_id: "0000001e0610b9e7"
   },
   // Invalid observation: nonexistent beehive nickname
   {
@@ -146,11 +146,11 @@ const redisObservations = [
       meta_id: 1,
       network: "array_of_things_chicago",
       datetime: "2017-04-07T17:50:51",
-      feature: "acceleration",
+      feature: "orientation",
       properties: {
-        x: -10,
-        y: 981,
-        z: 30
+        x: 3,
+        y: 1,
+        z: -1
       }
     }
   },
@@ -162,11 +162,11 @@ const redisObservations = [
       meta_id: 1,
       network: "array_of_things_chicago",
       datetime: "2017-04-07T17:50:51",
-      feature: "orientation",
+      feature: "acceleration",
       properties: {
-        x: 3,
-        y: 1,
-        z: -1
+        x: -10,
+        y: 981,
+        z: 30
       }
     }
   },
