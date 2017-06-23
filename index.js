@@ -108,7 +108,7 @@ function handler(event, context, callback) {
 }
 
 function getClients(stubs={}) {
-    // Grab a real client for every needed client that wasn't stubbed.
+    // Grab a real client for every client that wasn't stubbed.
     const clients = Object.assign({}, stubs);
     for (let clientName of ['postgres', 'firehose', 'redisPublisher']) {
         if (!clients[clientName]) {
@@ -157,9 +157,18 @@ function pushToFirehose(records, firehose) {
 }
 
 function prepRecordForFirehose(o) {
-    let row = `${o.network},${o.node},${o.datetime},${o.meta_id},${o.sensor},'${o.data}'\n`;
-    // Note that the double quote (") is the Redshift escape character.
-    row = row.replace(/"/g, '""').replace(/'/g, '"');
+    const data = JSON.stringify(o.data);
+    let row = `${o.network},${o.node},${o.datetime},${o.meta_id},${o.sensor},'${data}'\n`;
+    // Note that the double quote (") is the Redshift quote character.
+    // http://docs.aws.amazon.com/redshift/latest/dg/copy-parameters-data-format.html#copy-csv
+    // So we need to replace double quotes in stringified JSON with _two_ double quotes
+    row = row.replace(/"/g, '""');
+    // NB: this code once had a .replace(/'/g, '"') as well.
+    // Jesse can't remember why he wrote it in the first place, 
+    // but it may have been for an edge case he forgot about.
+    // Will thinks it is a bad idea to include such a line, 
+    // because a data field that has text with one apostrophe 
+    // could make the line unparsable.
     return {Data: row};
 }
 
