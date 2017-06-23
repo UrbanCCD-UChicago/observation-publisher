@@ -1,0 +1,34 @@
+{
+  "name": "observation-publisher",
+  "version": "1.0.0",
+  "description": "AWS lambda function that grabs incoming sensor observations off a Kinesis stream and publishes them to Redshift and Plenario socket server",
+  "engines": {
+    "node": "~6.10.3"
+  },
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UrbanCCD-UChicago/observation-publisher.git"
+  },
+  "author": "willengler",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/UrbanCCD-UChicago/observation-publisher/issues"
+  },
+  "homepage": "https://github.com/UrbanCCD-UChicago/observation-publisher#readme",
+  "devDependencies": {
+    "chai": "^4.0.2",
+    "mocha": "^3.4.2",
+    "sinon": "^2.3.4"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.69.0",
+    "bluebird": "^3.5.0",
+    "pg": "^6.2.4",
+    "redis": "^2.7.1",
+    "underscore": "^1.8.3"
+  }
+}
