@@ -191,16 +191,13 @@ function pushToSocketServer(records, postgres, publisher) {
  * 
  * @param {*} tree 
  * @param {sensor, node, netork, meta_id, timestamp, data} record
+ * 
+ * returns [observation]
  */
 function format(tree, record) {
     // Does this combination of network, node and sensor exist in our metadata?
     const sensorMetadata = extractSensorMetadata(tree, record);
     if (!sensorMetadata) return null;
-
-    // This is the descriptive JSONAPI-like format
-    // we want to send to our end users
-    const {sensor, node, network, datetime} = record;
-    // console.log('timestamp', record.timestamp);
     /** 
      * We maintain a mapping from Beehive naming to Plenario naming in
      * the sensorMetadata JSON:
@@ -228,24 +225,30 @@ function format(tree, record) {
      * and create a separate observation for each where the metadata is the same,
      * but the observation object is distinct
      * {
-     *   metadata: {}
-     *   observation: {
+     *   type: sensorObservations
+     *   attributes: {
+     *      node: foo,
+     *      ...
      *      feature: temperature,
      *      properties: {temperature: 58, internal_temperature: 103 }
-     *  }
+     *   }
      * },
      * { 
-     *  metadata: {}
-     *  observation: {
+     *   type: sensorObservations
+     *   attributes: {
+     *      node: foo,
+     *      ...
      *      feature: atmospheric_pressure,
      *      properties: {pressure: 12}
-     *  }
+     *   }
      * }
      * 
      * **/
     
-    // Map from feature name to observation object that will go in
-    // formatted JSONAPI observation object
+    const {sensor, node, network, datetime} = record;
+
+    // Loop 1: Split up the observed properties by feature
+    // by making a mapping from feature name to observation object
     const observations = {};
     for (var beehivePropertyName in record.data) {
         if (!(beehivePropertyName in sensorMetadata)) return false;
@@ -258,13 +261,10 @@ function format(tree, record) {
         }
         observations[feature].properties[property] = record.data[beehivePropertyName];
     }
-    // FIXME: This would be better as one loop
 
+    // Loop 2: Turn each collection of observed properties into a JSONAPI-ish observation object
     // Return array with one JSONAPI observation object 
     // for each feature present in the record
-    if (sensor === 'bmi160') {
-        console.log(observations);
-    }
     return _.values(observations).map(o => {
         const observationTemplate = {
             type: 'sensorObservations',
