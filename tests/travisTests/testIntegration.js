@@ -71,20 +71,35 @@ describe('handler', function() {
 
                 // Test redis payload was as expected
                 const [channel, redisPayload] = redisClient.publishAsync.getCall(0).args;
-                console.log(redisPayload);
-                const observations = JSON.parse(redisPayload);
-                // FIXME: This should not rely on ordering of the observations
-                expect(observations).to.deep.equal(fixtures.redisObservations);
+                
+                const observedObservations = _.pluck(JSON.parse(redisPayload), 'attributes');
+                const expectedObservations = _.pluck(fixtures.redisObservations, 'attributes');
+                expect(observedObservations.length).to.equal(expectedObservations.length);
+                
+                // Helper to avoid relying on ordering of the observations
+                function extractAndCompare(feature, meta) {
+                    const props = {feature, meta_id: meta};
+                    const observed = _.findWhere(observedObservations, props);
+                    const expected = _.findWhere(expectedObservations, props);
+                    expect(observed).to.be.ok;
+                    expect(observed).to.deep.equal(expected);
+                }
+                const pairs = [
+                    ['orientation', 1],
+                    ['acceleration', 1],
+                    ['temperature', 2],
+                    ['temperature', 3],
+                    ['gas_concentration', 4]
+                ]
+                for (let [feature, meta] of pairs) {
+                    extractAndCompare(feature, meta);
+                }
                 done()
             }
             catch(e) {
                 done(e)
             }
-            
-            
-            
         }
-
         handler(event, context, callback);
     })
 });
