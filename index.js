@@ -104,7 +104,7 @@ function handler(event, context, callback) {
         callback(null, msg)
     })
     // or propagate the error.
-    .error(callback);
+    .catch(callback);
 }
 
 function getClients(stubs={}) {
@@ -228,6 +228,7 @@ function format(tree, record) {
      *   type: sensorObservations
      *   attributes: {
      *      node: foo,
+     * 
      *      ...
      *      feature: temperature,
      *      properties: {temperature: 58, internal_temperature: 103 }

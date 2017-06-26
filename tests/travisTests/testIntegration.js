@@ -38,15 +38,11 @@ const event = {
     })
 }
 
-function extractObjectFromRow(row) {
+function splitJSONFromRow(row) {
     let json = /{.+}/.exec(row)[0].replace(/""/g, '"');
-    return JSON.parse(json);
-}
-
-function testFirehoseRowEquality(expected, observed) {
-    expected = extractObjectFromRow(expected);
-    observed = extractObjectFromRow(observed);
-    expect(expected).to.be.deep.equal(observed);
+    json = JSON.parse(json);
+    const head = row.split(/\"{.+}\"/);
+    return [head, json];
 }
 
 describe('handler', function() {
@@ -64,10 +60,9 @@ describe('handler', function() {
                 const [firehosePayload] = firehoseClient.putRecordBatch.getCall(0).args;
                 const observedRows = _.pluck(firehosePayload.Records, 'Data');
                 const expectedRows = fixtures.firehoseRows;
-                expect(observedRows.length).to.equal(expectedRows.length);
-                for (let i = 0; i < observedRows.length; i++) {
-                    testFirehoseRowEquality(expectedRows[i], observedRows[i]);
-                }
+                // Apply split function so that JSON in last column is parsed.
+                // That way the equality test doesn't depend on key ordering
+                expect(observedRows.map(splitJSONFromRow)).to.deep.equal(expectedRows.map(splitJSONFromRow));
 
                 // Test redis payload was as expected
                 const [channel, redisPayload] = redisClient.publishAsync.getCall(0).args;

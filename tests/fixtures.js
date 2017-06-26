@@ -125,15 +125,17 @@ const beehiveRecords = [
 // `${o.network},${o.node},${o.datetime},${o.meta_id},${o.sensor},'${data}'\n`;
 // Key ordering in JSON.stringify not guaranteed, so we need to extract those 
 // and use an object deepEqual comparison to make sure we fot what we expected.
+
+// TODO: test quote around the JSON brackets
 const firehoseRows = [
-    'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:51,1,bmi160,{""orient_y"":1,""orient_z"":-1,""accel_z"":30,""orient_x"":3,""accel_y"":981,""accel_x"":-10}',
-    'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:51,2,tmp112,{""temperature"":23.93}',
-    'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:51,3,tmp421,{""temperature"":38.43}',
-    'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:51,4,chemsense,{""o3"":367816,""co"":4410,""reducing_gases"":77,""h2s"":24829,""no2"":2239,""so2"":-362051,""oxidizing_gases"":34538}',
-    'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:53,5,tmp421,{""foo"":38.43}',
-    'foo,0000001e0610b9e7,2017-04-07T17:50:53,7,tmp421,{""temperature"":38.43}',
-    'array_of_things_chicago,foo,2017-04-07T17:50:53,7,tmp421,{""temperature"":38.43}',
-    'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:53,8,foo,{""temperature"":38.43}'
+    'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:51,1,bmi160,"{""orient_y"":1,""orient_z"":-1,""accel_z"":30,""orient_x"":3,""accel_y"":981,""accel_x"":-10}"',
+    'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:51,2,tmp112,"{""temperature"":23.93}"',
+    'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:51,3,tmp421,"{""temperature"":38.43}"',
+    'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:51,4,chemsense,"{""o3"":367816,""co"":4410,""reducing_gases"":77,""h2s"":24829,""no2"":2239,""so2"":-362051,""oxidizing_gases"":34538}"',
+    'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:53,5,tmp421,"{""foo"":38.43}"',
+    'array_of_things_pittsburgh,0000001e0610b9e7,2017-04-07T17:50:53,6,tmp421,"{""temperature"":38.43}"',
+    'array_of_things_chicago,foo,2017-04-07T17:50:53,7,tmp421,"{""temperature"":38.43}"',
+    'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:53,8,foo,"{""temperature"":38.43}"'
 ]
 
 
