@@ -15,8 +15,6 @@ aws.config.setPromisesDependency(Promise);
 // https://github.com/NodeRedis/node_redis#promises
 const redis = require('redis');
 Promise.promisifyAll(redis.RedisClient.prototype);
-// pg uses promises natively
-const pg = require('pg');
 
 /* Constants and config */
 const FIREHOSE_STREAM_NAME = 'DatabaseStream';
@@ -38,23 +36,6 @@ const clientCache = {
             this._firehoseClient = new aws.Firehose();
         }
         return this._firehoseClient;
-    },
-    /**
-     * pg client constructor uses env variables by default 
-     * (https://node-postgres.com/api/client):
-     * 
-     * config = {
-        user?: string, // default process.env.PGUSER || process.env.USER
-        password?: string, //default process.env.PGPASSWORD
-        database?: string, // default process.env.PGDATABASE || process.env.USER
-        port?: number, // default process.env.PGPORT
-        }
-     */
-    get postgres() {
-        if (!this._postgresClient) {
-            this._postgresClient = new pg.Client({});
-        }
-        return this._postgresClient;
     },
 
     get redisPublisher() {
@@ -88,34 +69,24 @@ function handler(event, context, callback) {
         return;
     }
     
-    // If we're under test, 
-    // then the test will pass in stub clients in context.stubs
-    const {redisPublisher, postgres, firehose} = getClients(context.stubs);
+    // If we're under test, the test will pass in stub clients in context.stubs
+    const stubs = context.stubs;
+    const redisPublisher = stubs.redisPublisher || clientCache.redisPublisher;
+    const firehose = stubs.firehose || clientCache.firehose;
 
     // Kick off the publication steps.
     Promise.all([
         pushToFirehose(records, firehose),
-        pushToSocketServer(records, postgres, redisPublisher)
+        redisPublisher.publishAsync(REDIS_CHANNEL_NAME, JSON.stringify(records))
     ])
     // Claim victory...
     .then(results => {
         // pushToSocketServer resolves with number of observations published
-        const msg = `Published ${results[0]} records, ${results[1]} observations`;
+        const msg = `Published ${records.length} records`;
         callback(null, msg)
     })
     // or propagate the error.
     .catch(callback);
-}
-
-function getClients(stubs={}) {
-    // Grab a real client for every client that wasn't stubbed.
-    const clients = Object.assign({}, stubs);
-    for (let clientName of ['postgres', 'firehose', 'redisPublisher']) {
-        if (!clients[clientName]) {
-            clients[clientName] = clientCache[clientName];
-        }
-    }
-    return clients;
 }
 
 /**
@@ -141,7 +112,7 @@ function decode(record) {
             datetime: parsed.datetime.replace(' ', 'T')
         }
     } catch (e) {
-        console.log(`[index.js] could not decode ${data}: ${e.toString()}`);
+        console.log(`Could not decode ${data}: ${e.toString()}`);
         return false;
     }
 }
@@ -152,147 +123,17 @@ function pushToFirehose(records, firehose) {
         Records: records.map(prepRecordForFirehose),
         DeliveryStreamName: FIREHOSE_STREAM_NAME
     };
-    return firehose.putRecordBatch(payload).promise()
-    .then(() => records.length)
+    return firehose.putRecordBatch(payload).promise();
 }
 
 function prepRecordForFirehose(o) {
     // Note that the double quote (") is the Redshift quote character.
     // http://docs.aws.amazon.com/redshift/latest/dg/copy-parameters-data-format.html#copy-csv
-    // IF you put two quote characters back to back, it escapes itself.
+    // If you put two quote characters back to back, it is interpreted as one literal double quote character.
     // So we need to replace double quotes in stringified JSON with _two_ double quotes.
     const data = JSON.stringify(o.data).replace(/"/g, '""');
+    // Note that we wrap stringified JSON in (unescaped) double quotes
+    // so that Redshift does not interpret the commas in the object as column delimiters
     let row = `${o.network},${o.node},${o.datetime},${o.meta_id},${o.sensor},"${data}"`;
     return {Data: row};
-}
-
-/**
- * Returns promise that resolves with number of observations pushed over redis
- */
-function pushToSocketServer(records, postgres, publisher) {
-    return postgres.query('SELECT sensor_tree();')
-    .then(result => {
-        const tree = result.rows[0].sensor_tree;
-        const observationArrays = records.map(format.bind(null, tree))
-                                         .filter(Boolean);
-        const formattedObservations = _.flatten(observationArrays);
-        if (formattedObservations.length === 0) {
-            return Promise.resolve(0); // 0 observations published
-        };
-        const payload = JSON.stringify(formattedObservations);
-        return publisher.publishAsync(REDIS_CHANNEL_NAME, payload)
-        .then(() => formattedObservations.length);
-    })
-}
-
-/**
- * Given a record, split it into an array of observations
- * in a format ready to publish to clients.
- * 
- * @param {*} tree 
- * @param {sensor, node, netork, meta_id, timestamp, data} record
- * 
- * returns [observation]
- */
-function format(tree, record) {
-    // Does this combination of network, node and sensor exist in our metadata?
-    const sensorMetadata = extractSensorMetadata(tree, record);
-    if (!sensorMetadata) return null;
-    /** 
-     * We maintain a mapping from Beehive naming to Plenario naming in
-     * the sensorMetadata JSON:
-     * 
-     * {
-     *      pressure: "atmospheric_pressure.pressure",
-     *      temperature: "temperature.temperature",
-     *      internal_temperature: "temperature.internal_temperature"
-     * }
-     * 
-     * where the keys are "nicknames" that Beehive uses,
-     * and the values are the features of interest maintained in Apiary.
-     * (The part before the dot is the feature of interest name;
-     *  the part after the dot is the specific property of the feature.)
-     * 
-     * The data documents in the record look like:
-     * 
-     * {
-     *      pressure: 12,
-     *      temperature: 58
-     *      internal_temperature: 103
-     * }
-     * 
-     * So the formatting task is to translate from Beehive nickname 
-     * and create a separate observation for each where the metadata is the same,
-     * but the observation object is distinct
-     * {
-     *   type: sensorObservations
-     *   attributes: {
-     *      node: foo,
-     * 
-     *      ...
-     *      feature: temperature,
-     *      properties: {temperature: 58, internal_temperature: 103 }
-     *   }
-     * },
-     * { 
-     *   type: sensorObservations
-     *   attributes: {
-     *      node: foo,
-     *      ...
-     *      feature: atmospheric_pressure,
-     *      properties: {pressure: 12}
-     *   }
-     * }
-     * 
-     * **/
-    
-    const {sensor, node, network, datetime} = record;
-
-    // Loop 1: Split up the observed properties by feature
-    // by making a mapping from feature name to observation object
-    const observations = {};
-    for (var beehivePropertyName in record.data) {
-        if (!(beehivePropertyName in sensorMetadata)) return false;
-        const [feature, property] = sensorMetadata[beehivePropertyName].split('.');
-        if (!observations[feature]) {
-            observations[feature] = {
-                feature,
-                properties: {}
-            };
-        }
-        observations[feature].properties[property] = record.data[beehivePropertyName];
-    }
-
-    // Loop 2: Turn each collection of observed properties into a JSONAPI-ish observation object
-    // Return array with one JSONAPI observation object 
-    // for each feature present in the record
-    return _.values(observations).map(o => {
-        const observationTemplate = {
-            type: 'sensorObservations',
-            attributes: {
-                sensor, node, network, datetime,
-                meta_id: record.meta_id
-            }
-        };
-        Object.assign(observationTemplate.attributes, o)
-        return observationTemplate;
-    });
-}
-
-function extractSensorMetadata(tree, observation) {
-    const {network, node, sensor} = observation;
-    let sensorMetadata;
-    try {
-        sensorMetadata = tree[network][node][sensor];    
-    }
-    catch (e) {}
-    // sensorMetadata will be undefined if an exception was thrown 
-    // or if the sensor metadata just happened to be undefined
-    if (sensorMetadata) {
-        return sensorMetadata;
-    }
-    else {
-        console.log(`[index.js validate] could not validate ${JSON.stringify(observation)}`);
-        return null;
-    }
 }
