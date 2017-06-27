@@ -41,7 +41,7 @@ describe('handler', function() {
         const context = {
             stubs: {
                 firehose: firehoseClient,
-                redisPublisher: redisClient
+                redisPublisher: Promise.resolve(redisClient)
             }
         };
         function callback() {

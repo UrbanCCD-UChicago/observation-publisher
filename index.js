@@ -59,7 +59,7 @@ function handler(event, context, callback) {
     // If we're under test, the test will pass in stub clients in context.stubs
     const stubs = context.stubs;
     const firehose = stubs.firehose || new aws.Firehose();
-    const publisherPromise = stubs.redis || getConnectedRedisClient(callback);
+    const publisherPromise = stubs.redisPublisher || getConnectedRedisClient(callback);
 
     // Kick off the publication steps.
     Promise.all([
