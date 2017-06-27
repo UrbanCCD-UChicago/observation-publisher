@@ -1,7 +1,3 @@
-/**
- * Imports and constants
- */
-
 //@ts-check
 exports.handler = handler;
 
@@ -21,37 +17,28 @@ const FIREHOSE_STREAM_NAME = 'DatabaseStream';
 const REDIS_CHANNEL_NAME = 'plenario_observations';
 const REDIS_ENDPOINT = process.env.REDIS_ENDPOINT || 'localhost';
 
-/**
- * Objects that survive across invocations
- */
-
-/* Keep references to connections in global scope
-   so that we can hold on to connections across function invocations.
-   And create the clients lazily in case we don't end up needing them
-   (like in unit tests)
+/*
+  Returns a promise that resolves with a redis client that has established a connection
 */
-const clientCache = {
-    get firehose() {
-        if (!this._firehoseClient) {
-            this._firehoseClient = new aws.Firehose();
-        }
-        return this._firehoseClient;
-    },
-
-    get redisPublisher() {
-        if (!this._redisClient) {
-            this._redisClient = redis.createClient({
-                host: REDIS_ENDPOINT, 
-                port: 6379
-            });
-        }
-        return this._redisClient;
-    }
-};
-
-/**
- * Per-invocation logic
- */
+function getConnectedRedisClient(kinesisKallback) {
+    return new Promise((resolve, reject) => {
+        const client = redis.createClient({
+            host: REDIS_ENDPOINT, 
+            port: 6379
+        });
+        // If we encounter a Redis error (like ECONNREFUSED or who knows what else)
+        // report an error back to Kinesis.
+        // The lambda will keep going until the run loop is empty, so firehose can complete.
+        client.on('error', kinesisKallback);
+        client.on('connect', () => {
+            resolve(client);
+        });
+        // In case the connection hangs, set a timeout to abort after a half second.
+        setTimeout(() => {
+            reject(new Error('Redis connection timed out'))
+        }, 500)
+    });
+}
 
 /**
  * Implementation of required handler for an incoming batch of kinesis records.
@@ -71,13 +58,13 @@ function handler(event, context, callback) {
     
     // If we're under test, the test will pass in stub clients in context.stubs
     const stubs = context.stubs;
-    const redisPublisher = stubs.redisPublisher || clientCache.redisPublisher;
-    const firehose = stubs.firehose || clientCache.firehose;
+    const firehose = stubs.firehose || new aws.Firehose();
+    const publisherPromise = stubs.redis || getConnectedRedisClient(callback);
 
     // Kick off the publication steps.
     Promise.all([
         pushToFirehose(records, firehose),
-        redisPublisher.publishAsync(REDIS_CHANNEL_NAME, JSON.stringify(records))
+        pushToSocketServer(records, publisherPromise)
     ])
     // Claim victory...
     .then(results => {
@@ -87,6 +74,16 @@ function handler(event, context, callback) {
     })
     // or propagate the error.
     .catch(callback);
+}
+
+function pushToSocketServer(records, publisherPromise) {
+    return publisherPromise
+    .then(publisher => {
+        publisher.publishAsync(REDIS_CHANNEL_NAME, JSON.stringify(records));
+        // #quit waits for running commands to finish,
+        // so this will disconnect after publishing.
+        publisher.quit();
+    })
 }
 
 /**
@@ -99,7 +96,6 @@ function decode(record) {
     try {
         data = Buffer.from(record.kinesis.data, 'base64').toString();
         const parsed = JSON.parse(data);
-        // Edge case: if meta_id is 0, it will fail this test.
         const valid = ['network', 'node_id', 'sensor', 'data', 'datetime']
                         .every(k => parsed[k]);
         if (!valid) return false;

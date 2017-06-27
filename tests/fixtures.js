@@ -94,11 +94,8 @@ const beehiveRecords = [
   }
 ];
 
-// We should pass all records to firehose
+// We should pass all records to firehose and redis
 // except those that are malformed.
-// `${o.network},${o.node},${o.datetime},${o.meta_id},${o.sensor},'${data}'\n`;
-// Key ordering in JSON.stringify not guaranteed, so we need to extract those 
-// and use an object deepEqual comparison to make sure we fot what we expected.
 
 const firehoseRows = [
     'array_of_things_chicago,0000001e0610b9e7,2017-04-07T17:50:51,1,bmi160,"{""orient_y"":1,""orient_z"":-1,""accel_z"":30,""orient_x"":3,""accel_y"":981,""accel_x"":-10}"',
