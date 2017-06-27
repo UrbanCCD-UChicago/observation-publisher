@@ -8,15 +8,6 @@ const sinon = require('sinon');
 const fixtures = require('../fixtures.js');
 const handler = require('../../index').handler;
 
-const packageResult = sensor_tree => ({rows: [{sensor_tree}]});
-
-const pgClient = {
-    query() {
-        const result = {rows: [{sensor_tree: fixtures.sensorTree}]};
-        return Promise.resolve(result);
-    }
-}
-
 const redisClient = {
     publishAsync: sinon.stub().returns(Promise.resolve())
 }
@@ -49,9 +40,8 @@ describe('handler', function() {
     it('should publish data in the right formats to firehose and redis', function(done) {
         const context = {
             stubs: {
-                postgres: pgClient,
                 firehose: firehoseClient,
-                redisPublisher: redisClient
+                redisPublisher: Promise.resolve(redisClient)
             }
         };
         function callback() {
@@ -66,29 +56,8 @@ describe('handler', function() {
 
                 // Test redis payload was as expected
                 const [channel, redisPayload] = redisClient.publishAsync.getCall(0).args;
-                
-                const observedObservations = _.pluck(JSON.parse(redisPayload), 'attributes');
-                const expectedObservations = _.pluck(fixtures.redisObservations, 'attributes');
-                expect(observedObservations.length).to.equal(expectedObservations.length);
-                
-                // Helper to avoid relying on ordering of the observations
-                function extractAndCompare(feature, meta) {
-                    const props = {feature, meta_id: meta};
-                    const observed = _.findWhere(observedObservations, props);
-                    const expected = _.findWhere(expectedObservations, props);
-                    expect(observed).to.be.ok;
-                    expect(observed).to.deep.equal(expected);
-                }
-                const pairs = [
-                    ['orientation', 1],
-                    ['acceleration', 1],
-                    ['temperature', 2],
-                    ['temperature', 3],
-                    ['gas_concentration', 4]
-                ]
-                for (let [feature, meta] of pairs) {
-                    extractAndCompare(feature, meta);
-                }
+                expect(JSON.parse(redisPayload)).to.deep.equal(fixtures.redisRecords);
+
                 done()
             }
             catch(e) {
