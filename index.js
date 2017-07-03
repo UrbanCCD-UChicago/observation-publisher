@@ -129,7 +129,7 @@ function decode(record) {
       data: parsed.data,
       // Invalid timestamp format or value [YYYY-MM-DD HH24:MI:SS]
       // Required redshift timestamp format
-      datetime: parsed.datetime
+      datetime: parsed.datetime.replace("T", " ");
     };
   } catch (e) {
     console.log(`Could not decode ${data}: ${e.toString()}`);
