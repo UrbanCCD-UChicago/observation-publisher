@@ -13,7 +13,7 @@ const redis = require("redis");
 Promise.promisifyAll(redis.RedisClient.prototype);
 
 /* Constants and config */
-const FIREHOSE_STREAM_NAME = "DatabaseStream";
+const FIREHOSE_STREAM_NAME = process.env.FIREHOSE_STREAM_NAME;
 const REDIS_CHANNEL_NAME = "plenario_observations";
 const REDIS_ENDPOINT = process.env.REDIS_ENDPOINT || "localhost";
 
@@ -37,10 +37,10 @@ function getConnectedRedisClient(kinesisCallback) {
       resolve(client);
     });
     // In case the connection hangs, set a timeout to abort after a half second.
-    setTimeout(() => {
-      client.quit();
-      reject(new Error("Redis connection timed out"));
-    }, 500);
+    // setTimeout(() => {
+    //   client.quit();
+    //   reject(new Error("Redis connection timed out"));
+    // }, 500);
   });
 }
 
@@ -63,9 +63,25 @@ function handler(event, context, callback) {
 
   // If we're under test, the test will pass in stub clients in context.stubs
   const stubs = context.stubs;
-  const firehose = stubs.firehose || new aws.Firehose();
-  const publisherPromise =
-    stubs.redisPublisher || getConnectedRedisClient(callback);
+
+  console.log('records: ' + records);
+  console.log(records);
+  console.log('stubs: ' + stubs);
+
+  let firehose = null;
+  let publisherPromise = null;
+
+  if (stubs) {
+    firehose = stubs.firehose;
+    publisherPromise = stubs.redisPublisher;
+  }
+
+  else {
+    firehose = new aws.Firehose();
+    publisherPromise = getConnectedRedisClient(callback);
+  }
+
+  console.log(firehose);
 
   // Kick off the publication steps.
   Promise.all([
@@ -111,7 +127,9 @@ function decode(record) {
       node: parsed.node_id,
       sensor: parsed.sensor.toLowerCase(),
       data: parsed.data,
-      datetime: parsed.datetime.replace(" ", "T")
+      // Invalid timestamp format or value [YYYY-MM-DD HH24:MI:SS]
+      // Required redshift timestamp format
+      datetime: parsed.datetime
     };
   } catch (e) {
     console.log(`Could not decode ${data}: ${e.toString()}`);
@@ -121,6 +139,7 @@ function decode(record) {
 
 // Returns promise that resolves with number of records published
 function pushToFirehose(records, firehose) {
+  console.log("records in pushToFirehose: " , records);
   const payload = {
     Records: records.map(prepRecordForFirehose),
     DeliveryStreamName: FIREHOSE_STREAM_NAME
@@ -136,6 +155,9 @@ function prepRecordForFirehose(o) {
   const data = JSON.stringify(o.data).replace(/"/g, '""');
   // Note that we wrap stringified JSON in (unescaped) double quotes
   // so that Redshift does not interpret the commas in the object as column delimiters
-  let row = `${o.network},${o.node},${o.datetime},${o.meta_id},${o.sensor},"${data}"`;
+  //PLASE MAKE NOTE OF NEWLINE AT THE END OF THE RECORD
+  //NECESSARY BECAUSE WHEN THE RECORDS ARE BUFFERED TOGETHER, FIREHOSE CONCTANTES THEM TOGETHER
+  let row = `${o.network},${o.node},${o.datetime},${o.meta_id},${o.sensor},"${data}"\n`;
+
   return { Data: row };
 }
