@@ -34,7 +34,7 @@ const firehoseRows = [
 
 const redisRecords = [
   {
-    datetime: "2017-04-07T17:50:51",
+    datetime: "2017-04-07 17:50:51",
     network: "array_of_things_chicago",
     meta_id: 1,
     data: {
@@ -49,7 +49,7 @@ const redisRecords = [
     node: "0000001e0610b9e7"
   },
   {
-    datetime: "2017-04-07T17:50:51",
+    datetime: "2017-04-07 17:50:51",
     network: "array_of_things_chicago",
     meta_id: 2,
     data: { temperature: 23.93},
