@@ -47,15 +47,15 @@ const redisRecords = [
     },
     sensor: "bmi160",
     node: "0000001e0610b9e7"
-  },
+  }\n,
   {
     datetime: "2017-04-07T17:50:51",
     network: "array_of_things_chicago",
     meta_id: 2,
-    data: { temperature: 23.93 },
+    data: { temperature: 23.93},
     sensor: "tmp112",
     node: "0000001e0610b9e7"
-  }
+  }\n
 ]
 
 exports.beehiveRecords = beehiveRecords;
